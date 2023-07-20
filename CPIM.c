@@ -9,8 +9,8 @@
 #include <stdio.h>
 
 /* Lattice Size */
-#define X_SIZE 256
-#define Y_SIZE 256
+#define X_SIZE 250
+#define Y_SIZE 250
 
 /* Defaulfs */
 #define SAMPLE_RATE 100
@@ -20,7 +20,7 @@
 #define BETA_MIN 0.000000
 #define BETA_MAX 0.005
 // default mortality/extinction rate/probability and scale ranges
-#define DELTA  0.0001
+#define DELTA  0.00001
 #define DELTA_STEP  0.00001
 #define DELTA_MIN 0.000000
 #define DELTA_MAX 0.005
@@ -35,7 +35,7 @@
 // use a positive number!
 #define COUPLING (1)
 // default Temperature and scale ranges
-#define TEMPERATURE 2.269
+#define TEMPERATURE 2.27
 #define TEMPERATURE_STEP 0.0000001
 #define TEMPERATURE_MIN  0.0000001
 #define TEMPERATURE_MAX  15 
@@ -43,6 +43,11 @@
 #define RADIUS 1
 // default initial condition chosen
 #define INIT 1
+// default external field (B) and scale ranges
+#define EXTERNAL_FIELD 0.0
+#define EXTERNAL_FIELD_STEP 0.0000001
+#define EXTERNAL_FIELD_MIN -1.0
+#define EXTERNAL_FIELD_MAX 1.0
 
 
 
@@ -66,6 +71,7 @@ struct simulation
   double differentiation_rate;/* Differentiation into spin state */
   double T;                   /* Ising's temperature */
   double J;                   /* Ising's coupling: ferro (-kB) or anti-ferro (+kB) */
+  double B;                   /* Ising's external field (B) */
   double lamda_rate;          /* Contact-Ising Monte Carlo biass*/
 } s ;        // instance s of the structure to hold the simulation
 
@@ -138,7 +144,7 @@ double local_energy (int x, int y)
         if (s.lattice_configuration[(int)((X_SIZE + x+1)%X_SIZE)][(int)((Y_SIZE + y+1)%Y_SIZE)] == 1){up++;}
     	   else if (s.lattice_configuration[(int)((X_SIZE + x+1)%X_SIZE)][(int)((Y_SIZE + y+1)%Y_SIZE)] == -1){down++;}
     	  }
-	energy =  s.J * (double) (s.lattice_configuration[x][y] * (up-down));
+	energy =  (double) (s.lattice_configuration[x][y] * (s.J * (up-down) - s.B));
   return energy;
 	}
 
@@ -523,6 +529,13 @@ static void temperature_scale_moved (GtkRange *range, gpointer user_data)
   s.T = (float) pos;
   }
 
+/* Callback to respond GtK scale slide move event */
+static void external_field_scale_moved (GtkRange *range, gpointer user_data)
+  {
+  gdouble pos = gtk_range_get_value (range);
+  s.B = (float) pos;
+  }
+
 
 /*  Callback to respond Gtk scale slide move event */
 static void display_rate_scale_moved (GtkRange *range, gpointer user_data)
@@ -556,6 +569,8 @@ static void initialize_simulation(void)
   s.T = (double) TEMPERATURE;
   // Spin coupling
   s.J = -1 * (double) COUPLING;
+  // External field
+  s.B = (double) EXTERNAL_FIELD;
   /* Set simulation flags */
   s.running = FALSE;
   s.initialized = FALSE;
@@ -668,7 +683,7 @@ static void activate (GtkApplication *app, gpointer user_data)
 
 
   // Ising Model (IM) Box
-  // to control the parameter of the Ising model
+  // to control the parameters of the Ising model
   box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   // TEMPERATURE
   // make a scale bar to set Temperature
@@ -679,6 +694,14 @@ static void activate (GtkApplication *app, gpointer user_data)
   frame =  gtk_frame_new ("Temperature");
   gtk_container_add (GTK_CONTAINER (frame), scale);
   gtk_container_add (GTK_CONTAINER (box), frame);
+  // EXTERNAL FIELD
+  scale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL, (gdouble) EXTERNAL_FIELD_MIN, (gdouble) EXTERNAL_FIELD_MAX, (gdouble) EXTERNAL_FIELD_STEP);
+  gtk_range_set_value (GTK_RANGE (scale), (gfloat) EXTERNAL_FIELD);
+  g_signal_connect (scale, "value-changed", G_CALLBACK (external_field_scale_moved), NULL);
+  frame = gtk_frame_new ("External field");
+  gtk_container_add (GTK_CONTAINER (frame), scale);
+  gtk_container_add (GTK_CONTAINER (box), frame);
+
 
   // Add a verical separator to the parameter grid for order
   separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
@@ -906,7 +929,7 @@ int main (int argc, char **argv)
   {
   GtkApplication *app;
   int status;
-  app = gtk_application_new ("keymer.lab.contact_process_ising_model", G_APPLICATION_FLAGS_NONE);
+  app = gtk_application_new ("keymer.lab.contact_process_ising_model", G_APPLICATION_DEFAULT_FLAGS);
   g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
   status = g_application_run (G_APPLICATION (app), argc, argv);
   g_object_unref (app);
