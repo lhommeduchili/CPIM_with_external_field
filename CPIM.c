@@ -14,36 +14,35 @@
 
 /* Defaulfs */
 #define SAMPLE_RATE 100
-// default birth/colonization rate/probability and scale ranges
+/* default birth/colonization rate/probability and scale ranges */
 #define BETA  0.003
 #define BETA_STEP 0.00001
 #define BETA_MIN 0.000000
 #define BETA_MAX 0.005
-// default mortality/extinction rate/probability and scale ranges
+/* default mortality/extinction rate/probability and scale ranges */
 #define DELTA  0.00001
 #define DELTA_STEP  0.00001
 #define DELTA_MIN 0.000000
 #define DELTA_MAX 0.005
-// default differentiation rate/probability and scale ranges
+/* default differentiation rate/probability and scale ranges */
 #define ALPHA  0.1
 #define ALPHA_STEP 0.01
 #define ALPHA_MIN  0.00
 #define ALPHA_MAX  1.0
-// strength of the coupling in positive terms (J =  -1*COUPLING kBT units)
-// we should have 1/2 if we do not want to douple count pairs
-// therefore
-// use a positive number!
+/* strength of the coupling in positive terms (J =  -1*COUPLING kBT units)
+   we should have 1/2 if we do not want to douple count pairs,
+   therefore use a positive number! */
 #define COUPLING (1)
-// default Temperature and scale ranges
+/* default temperature and scale ranges */
 #define TEMPERATURE 2.27
 #define TEMPERATURE_STEP 0.0000001
 #define TEMPERATURE_MIN  0.0000001
 #define TEMPERATURE_MAX  15 
-// default interaction radius
+/* default interaction radius */
 #define RADIUS 1
-// default initial condition chosen
+/* default initial condition chosen */
 #define INIT 1
-// default external field (B) and scale ranges
+/* default external field (B) and scale ranges */
 #define EXTERNAL_FIELD 0.0
 #define EXTERNAL_FIELD_STEP 0.0000001
 #define EXTERNAL_FIELD_MIN -1.0
@@ -60,9 +59,11 @@ struct simulation
   int init_option;            /* Choice of initial condition*/
   gboolean initialized;       /* Have we been initialized? */
   int generation_time;        /* Generations simulated */
-  int Ising_neighboorhood;    /* Ising Neighboorhood: r=1 (NN) vs r=2 (NNN)*/
+  int Ising_neighboorhood;    /* Ising Neighboorhood: r=1 (NN), r=2 (NNN), etc*/
+  int num_neighbors;          /* Effective number of neighbors a la Von Neumann 
+                                 in the spin-spin interactions */
   int occupancy;              /* Lattice occupancy */
-  int vacancy;                /* Lattice vacancy*/
+  int vacancy;                /* Lattice vacancy */
   int up;                     /* Number of spins in the up   (+1) state */
   int down;                   /* Number of spins in the down (-1) state */
   int display_rate;           /* Display rate: to paint the lattice*/
@@ -70,19 +71,79 @@ struct simulation
   double death_rate;          /* Contact Process' death */
   double differentiation_rate;/* Differentiation into spin state */
   double T;                   /* Ising's temperature */
-  double J;                   /* Ising's coupling: ferro (-kB) or anti-ferro (+kB) */
+  double J;                   /* Ising's coupling: ferro (-kB) or 
+                                 anti-ferro (+kB) */
   double B;                   /* Ising's external field (B) */
   double lamda_rate;          /* Contact-Ising Monte Carlo biass*/
 } s ;        // instance s of the structure to hold the simulation
 
 
 // Gdk Pixel Buffer functions Implemented at the end of document.
-void put_pixel(GdkPixbuf *pixbuf, int x, int y, guchar red, guchar green, guchar blue, guchar alpha);
+void put_pixel(GdkPixbuf *pixbuf, int x, int y, 
+               guchar red, guchar green, guchar blue, guchar alpha);
 static void paint_a_background (gpointer data);
 static void paint_lattice (gpointer data);
 
 
-// Other Funtions
+/* other funtions */
+/* */
+void set_num_neighbors(void)
+  {
+  s.num_neighbors = pow(s.Ising_neighboorhood, 2) + pow(s.Ising_neighboorhood + 1, 2) - 1;
+  g_print ("Number of neighbors: %d \n", s.num_neighbors);
+  }
+
+
+/* Function to get the closest neighbors (separated by r sites) of a given site 
+   in the lattice */
+void get_neighborhood (int x, int y, int r, int* neighbors)
+  {
+  int n = 0;
+	/* We iterate over a square of r^2 sites centered at (i, j) = (0,0) */
+  for (int i = -r; i <= r; i++) 
+    {
+    for (int j = -r; j <= r; j++) 
+      {
+			/* We skip the focal site at the origin */
+      if (i == 0 && j == 0) {continue;}
+			/* We also skip sites that beyond (|i|+|j|) = r in order to match 
+			   von Neumann's neighborhood connectivity. */
+			else if (abs(i) + abs(j) > r) {continue;}
+      neighbors[n] = s.lattice_configuration[(int) (X_SIZE + x + i) % X_SIZE]
+                                            [(int) (Y_SIZE + y + j) % Y_SIZE];
+			n++;
+      }
+    }
+  }
+
+
+/* Function used to compute the energy value of the site located at (x, y) */
+double compute_energy (int x, int y)
+  {
+  double energy;
+  int spin = 0;
+  double neighborhood_configuration = 0;
+  // int num_neighbors = pow(s.Ising_neighboorhood, 2) + pow(s.Ising_neighboorhood + 1, 2) - 1;
+  int neighborhood[s.num_neighbors];
+
+	if (s.lattice_configuration[x][y] == 1) {spin = 1;}
+  else if (s.lattice_configuration[x][y] == -1) {spin = -1;}
+
+  get_neighborhood (x, y, s.Ising_neighboorhood, neighborhood);
+  
+  for (int n = 0; n < s.num_neighbors; n++) 
+    {
+    /* If neighbor has no spin, go to the next one */
+		if (neighborhood[n] == 0 || neighborhood[n] == 2) {continue;}
+		else if (neighborhood[n] == 1) {neighborhood_configuration += 1;}
+    else if (neighborhood[n] == -1) {neighborhood_configuration -= 1;}
+		// g_print("neighbor state = %d\t neighborhood config = %f\n", neighborhood[n], neighborhood_configuration);
+    }
+  energy = (double) spin*(s.J * neighborhood_configuration - s.B);
+	
+  return energy;
+  }
+
 
 double local_energy (int x, int y)
 	{
@@ -161,7 +222,7 @@ int update_lattice (gpointer data)
   // Probability of reactions
   double transition_probability;
   int random_x_coor, random_y_coor;
-  // For the Contact Process we always consider NN interactions
+  /* For the Contact Process we always consider NN interactions */
   for (int site = 0; site < (int) (Y_SIZE*X_SIZE); site++)
     {
     /* Pick a random focal site */
@@ -219,63 +280,63 @@ int update_lattice (gpointer data)
         // inner components which can undertake reactions only if the cell
         // indeed exists
         if (genrand64_real2 () < s.death_rate)
-                       {
-                        s.lattice_configuration[random_x_coor][random_y_coor] = 0;
-                        s.occupancy --; s.vacancy ++;
-                       }
-             else if (genrand64_real2 () < s.differentiation_rate)
-                      {
-                       /* Set an occupied site in the middle of the lattice */
-                       random_spin = (int) ((genrand64_int64 () % 2) * 2) - 1;
-                      if (random_spin == 1)
-                          {
-                           s.lattice_configuration[random_x_coor][random_y_coor] = random_spin;
-                           s.up ++;
-                           }
-                       else if (random_spin == -1)
-                           {
-                           s.lattice_configuration[random_x_coor][random_y_coor] = random_spin;
-                           s.down ++;
-                           }
-                      }
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = 0;
+          s.occupancy --; s.vacancy ++;
+          }
+        else if (genrand64_real2 () < s.differentiation_rate)
+        {
+        /* Set an occupied site in the middle of the lattice */
+        random_spin = (int) ((genrand64_int64 () % 2) * 2) - 1;
+        if (random_spin == 1)
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = random_spin;
+          s.up ++;
+          }
+        else if (random_spin == -1)
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = random_spin;
+          s.down ++;
+          }
+        }
         break;
       case 1: /* Focal point is in the up (+1) state */
         // We skip Gillespie because of separation of scales
         spin_energy = local_energy (random_x_coor, random_y_coor);
+        if (spin_energy != compute_energy(random_x_coor, random_y_coor)) {g_print ("Kevin's energy: %f \t Alf's energy: %f \n", spin_energy, compute_energy(random_x_coor, random_y_coor));}
         spin_energy_diff = -(2) * spin_energy;
         transition_probability = exp (-spin_energy_diff/s.T);
         if (genrand64_real2 () < s.death_rate)
-                        {
-                        s.lattice_configuration[random_x_coor][random_y_coor] = 0;
-                        s.occupancy --; s.vacancy ++;
-                        s.up --;
-                        }
-                else if (spin_energy_diff < 0 ||
-                                              genrand64_real2 () < transition_probability)
-                        {
-                        s.lattice_configuration[random_x_coor][random_y_coor] = -1;
-                        s.up --;
-                        s.down ++;
-                        }
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = 0;
+          s.occupancy --; s.vacancy ++;
+          s.up --;
+          }
+        else if (spin_energy_diff < 0 || genrand64_real2 () < transition_probability)
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = -1;
+          s.up --;
+          s.down ++;
+          }
         break;
       case -1: /* Focal point is in the down (-1) state */
         // We skip Gillespie because of separation of scales
         spin_energy = local_energy (random_x_coor, random_y_coor);
+        if (spin_energy != compute_energy(random_x_coor, random_y_coor)) {g_print ("Kevin's energy: %f \t Alf's energy: %f \n", spin_energy, compute_energy(random_x_coor, random_y_coor));}
         spin_energy_diff = -(2) * spin_energy;
         transition_probability = exp (-spin_energy_diff/s.T);
         if (genrand64_real2 () < s.death_rate)
-                        {
-                        s.lattice_configuration[random_x_coor][random_y_coor] = 0;
-                        s.occupancy --; s.vacancy ++;
-                        s.down --;
-                        }
-                else if (spin_energy_diff < 0 ||
-                                              genrand64_real2 () < transition_probability)
-                        {
-                        s.lattice_configuration[random_x_coor][random_y_coor] = 1;
-                        s.up ++;
-                        s.down --;
-                        }
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = 0;
+          s.occupancy --; s.vacancy ++;
+          s.down --;
+          }
+        else if (spin_energy_diff < 0 || genrand64_real2 () < transition_probability)
+          {
+          s.lattice_configuration[random_x_coor][random_y_coor] = 1;
+          s.up ++;
+          s.down --;
+          }
         break;
       }
     }
@@ -367,7 +428,7 @@ static void init_lattice (GtkWidget *widget, gpointer data)
          
             break;
       case 5:
-            // Se a lattice fully occupied with undufferenciated particels
+            // Set up a lattice fully occupied with undufferenciated particels
             for (x = 0; x < (int) X_SIZE; x++)
                for (y = 0; y < (int) Y_SIZE; y++)
                     {
@@ -474,12 +535,21 @@ static void on_radio_NN (GtkWidget *button, gpointer data)
   {
   char *id_radio = (char*)data;g_print("%s\n", id_radio);
   s.Ising_neighboorhood = 1;
+  set_num_neighbors();
   }
-// NNN; r =2
+// NNN; r = 2
 static void on_radio_NNN (GtkWidget *button, gpointer data)
   {
   char *id_radio = (char*)data;g_print("%s\n", id_radio);
   s.Ising_neighboorhood = 2;
+  set_num_neighbors();
+  }
+// NNNN; r = 3
+static void on_radio_NNNN (GtkWidget *button, gpointer data)
+  {
+  char *id_radio = (char*)data;g_print("%s\n", id_radio);
+  s.Ising_neighboorhood = 3;
+  set_num_neighbors();
   }
 
 /* Callback to change Ising J = -kB (ferro) vs J = +kB (anti-ferro) -- dirty */
@@ -565,6 +635,7 @@ static void initialize_simulation(void)
   // Ising Model
   // interaction radius
   s.Ising_neighboorhood = (int) RADIUS;
+  set_num_neighbors();
   // Temperature
   s.T = (double) TEMPERATURE;
   // Spin coupling
@@ -582,10 +653,12 @@ static void initialize_simulation(void)
 /* Activate function */
 static void activate (GtkApplication *app, gpointer user_data)
   {
+  /* Initialize simulation */
   initialize_simulation();
   // This function should only contain Gtk stuff
   /* General Gtk widgets for the Window packing */
-  GtkWidget *window, *grid, *image_lattice, *label, *frame, *notebook, *box, *scale, *radio, *separator;
+  GtkWidget *window, *grid, *image_lattice, *label, *frame, *notebook, *box;
+  GtkWidget *scale, *radio, *separator;
   GdkPixbuf *pixbuf;
 
   // Parameters Section
@@ -603,12 +676,16 @@ static void activate (GtkApplication *app, gpointer user_data)
   // We make a box to hold stuff together
   box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   // We make a radio button for the NN (r=1) choice
-  radio = gtk_radio_button_new_with_label(NULL, "Nearest Neighboors (NN); r=1 ");
+  radio = gtk_radio_button_new_with_label(NULL, "Nearest Neighboors (NN); r = 1 ");
   g_signal_connect(GTK_TOGGLE_BUTTON(radio), "pressed", G_CALLBACK(on_radio_NN), (gpointer)"NN interaction selected");
   gtk_box_pack_start(GTK_BOX(box), radio, TRUE, TRUE, 0);
   // We make a radio button for the NNN (r=2) choice
-  radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio), "Next Nearest Neighboors (NNN); r=2 ");
+  radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio), "Next Nearest Neighboors (NNN); r = 2 ");
   g_signal_connect(GTK_TOGGLE_BUTTON(radio), "pressed", G_CALLBACK(on_radio_NNN), (gpointer)"NNN interaction selected");
+  gtk_box_pack_start(GTK_BOX(box), radio, TRUE, TRUE, 0);
+  // We make yet another radio button for the NNNN (r=3) choice
+  radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio), "Next-Next Nearest Neighboors (NNNN); r = 3 ");
+  g_signal_connect(GTK_TOGGLE_BUTTON(radio), "pressed", G_CALLBACK(on_radio_NNNN), (gpointer)"NNNN interaction selected");
   gtk_box_pack_start(GTK_BOX(box), radio, TRUE, TRUE, 0);
   // Add the packing box to a Neighboorhood size Frame
   gtk_container_add (GTK_CONTAINER (frame), box);
