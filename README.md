@@ -1,4 +1,4 @@
-![screenshot of the program](CPIM\ GUI\ screenshot.png)
+![screenshot of the program](https://github.com/lhommeduchili/CPIM_with_external_field/blob/main/CPIM%20GUI%20screenshot.png)
 
 # Contact Process Ising Model
 The Contact Process Ising Model (CPIM) picks up on the Contact Process (CP)
