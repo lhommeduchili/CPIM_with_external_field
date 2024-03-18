@@ -40,8 +40,6 @@
 #define TEMPERATURE_MAX  15 
 /* default interaction radius */
 #define RADIUS 1
-// /* default number of neighbors */
-// #define NUM_NEIGHBORS 4
 /* default initial condition chosen */
 #define INIT 1
 /* default external field (B) and scale ranges */
@@ -64,8 +62,10 @@ struct simulation
   int Ising_neighboorhood;    /* Ising Neighboorhood: r=1 (NN), r=2 (NNN), etc*/
   int num_neighbors;          /* Effective number of neighbors a la Von Neumann 
                                  in the spin-spin interactions */
-  // double *transition_probs;   /* Pointer to an array storing all the poossible 
+  // double exp_values_NN[9];    /* double array storing all the poossible 
   //                                transition probabilities computed when doing MHMC */
+  // double exp_values_NNN[25];
+  // double exp_values_NNNN[49];
   int occupancy;              /* Lattice occupancy */
   int vacancy;                /* Lattice vacancy */
   int up;                     /* Number of spins in the up   (+1) state */
@@ -94,32 +94,55 @@ static void paint_lattice (gpointer data);
 void set_num_neighbors(void)
   {
   s.num_neighbors = pow(s.Ising_neighboorhood, 2) + pow(s.Ising_neighboorhood + 1, 2) - 1;
-  g_print ("Number of neighbors: %d \n", s.num_neighbors);
   }
 
 
-// /* */
-// void set_transition_probs(void)
+// void set_exp_values(void)
 //   {
 //   double spin_energy, spin_energy_diff;
-//   double transition_probability;
-  
-//   /* First take care of memory allocation */
-//   double *temp = realloc(s.transition_probs, ((2*s.num_neighbors)+1) * sizeof(double));
-//   if (temp != NULL) {s.transition_probs = temp;}
-//   else {free(s.transition_probs); g_print("Memory re-allocation failed.");}
-  
 //   int i = 0;
-// 	for (int n = -s.num_neighbors; n <= s.num_neighbors; n++)
-// 	  {
-// 		/* */
-// 		spin_energy = (n * s.J) - s.B;
+//   for (int n = -s.num_neighbors; n <= s.num_neighbors; n++)
+//     {
+//     spin_energy = (n * s.J) - s.B;
 //     spin_energy_diff = -(2) * spin_energy;
-//     transition_probability = exp (-spin_energy_diff/s.T);
-//     s.transition_probs[i] = transition_probability;
-// 		i++;
-// 	  }
-//   return;
+//     switch (s.Ising_neighboorhood)
+//       {
+//       case 1:
+//         s.exp_values_NN[i] = exp (-spin_energy_diff/s.T);
+//         // g_print("exp value for %d neighbors = %f \n", s.num_neighbors, s.exp_values_NN[i]);
+//         break;
+//       case 2:
+//         s.exp_values_NNN[i] = exp (-spin_energy_diff/s.T);
+//         // g_print("exp value for %d neighbors = %f \n", s.num_neighbors, s.exp_values_NNN[i]);
+//         break;
+//       case 3:
+//         s.exp_values_NNNN[i] = exp (-spin_energy_diff/s.T);
+//         // g_print("exp value for %d neighbors = %f \n", s.num_neighbors, s.exp_values_NNNN[i]);
+//         break;
+//       }
+//     i++;
+    
+//     }
+//   }
+
+
+// double get_exp_value(double spin_energy_diff)
+//   {
+//   int idx =  (int) (spin_energy_diff/2) + s.num_neighbors;
+//   // g_print("spin energy dif = %f \t index = %d \n", spin_energy_diff, idx);
+//   switch (s.Ising_neighboorhood)
+//     {
+//     case 1:
+//       return s.exp_values_NN[idx];
+//       break;
+//     case 2:
+//       return s.exp_values_NNN[idx];
+//       break;
+//     case 3:
+//       return s.exp_values_NNNN[idx];
+//       break;
+//     }
+//   return 0;
 //   }
 
 
@@ -152,7 +175,6 @@ double compute_energy (int x, int y)
   double energy;
   int spin = 0;
   double neighborhood_configuration = 0;
-  // int num_neighbors = pow(s.Ising_neighboorhood, 2) + pow(s.Ising_neighboorhood + 1, 2) - 1;
   int neighborhood[s.num_neighbors];
 
 	if (s.lattice_configuration[x][y] == 1) {spin = 1;}
@@ -166,7 +188,6 @@ double compute_energy (int x, int y)
 		if (neighborhood[n] == 0 || neighborhood[n] == 2) {continue;}
 		else if (neighborhood[n] == 1) {neighborhood_configuration += 1;}
     else if (neighborhood[n] == -1) {neighborhood_configuration -= 1;}
-		// g_print("neighbor state = %d\t neighborhood config = %f\n", neighborhood[n], neighborhood_configuration);
     }
   energy = (double) spin*(s.J * neighborhood_configuration - s.B);
 	
@@ -332,13 +353,9 @@ int update_lattice (gpointer data)
         break;
       case 1: /* Focal point is in the up (+1) state */
         // We skip Gillespie because of separation of scales
-        // spin_energy = local_energy (random_x_coor, random_y_coor);
-        // if (spin_energy != compute_energy(random_x_coor, random_y_coor)) {g_print ("Kevin's energy: %f \t Alf's energy: %f \n", spin_energy, compute_energy(random_x_coor, random_y_coor));}
-        spin_energy = compute_energy(random_x_coor, random_y_coor);
+        spin_energy = compute_energy (random_x_coor, random_y_coor);
         spin_energy_diff = -(2) * spin_energy;
         transition_probability = exp (-spin_energy_diff/s.T);
-        // probs_idx = (int) -spin_energy_diff/2 + s.num_neighbors;
-        // if (s.transition_probs[probs_idx] != transition_probability) {g_print("Juan's transition probability: %f \t Al transition probability: %f \n", transition_probability, s.transition_probs[probs_idx]);}
         if (genrand64_real2 () < s.death_rate)
           {
           s.lattice_configuration[random_x_coor][random_y_coor] = 0;
@@ -354,13 +371,9 @@ int update_lattice (gpointer data)
         break;
       case -1: /* Focal point is in the down (-1) state */
         // We skip Gillespie because of separation of scales
-        // spin_energy = local_energy (random_x_coor, random_y_coor);
-        // if (spin_energy != compute_energy(random_x_coor, random_y_coor)) {g_print ("Kevin's energy: %f \t Alf's energy: %f \n", spin_energy, compute_energy(random_x_coor, random_y_coor));}
-        spin_energy = compute_energy(random_x_coor, random_y_coor);
+        spin_energy = compute_energy (random_x_coor, random_y_coor);
         spin_energy_diff = -(2) * spin_energy;
         transition_probability = exp (-spin_energy_diff/s.T);
-        // probs_idx = (int) -spin_energy_diff/2 + s.num_neighbors;
-        // if (s.transition_probs[probs_idx] != transition_probability) {g_print("Juan's transition probability: %f \t Al transition probability: %f \n", transition_probability, s.transition_probs[probs_idx]);}
         if (genrand64_real2 () < s.death_rate)
           {
           s.lattice_configuration[random_x_coor][random_y_coor] = 0;
@@ -571,7 +584,8 @@ static void on_radio_NN (GtkWidget *button, gpointer data)
   {
   char *id_radio = (char*)data;g_print("%s\n", id_radio);
   s.Ising_neighboorhood = 1;
-  set_num_neighbors();
+  set_num_neighbors ();
+  // set_exp_values ();
   }
 // NNN; r = 2
 static void on_radio_NNN (GtkWidget *button, gpointer data)
@@ -579,6 +593,7 @@ static void on_radio_NNN (GtkWidget *button, gpointer data)
   char *id_radio = (char*)data;g_print("%s\n", id_radio);
   s.Ising_neighboorhood = 2;
   set_num_neighbors();
+  // set_exp_values ();
   }
 // NNNN; r = 3
 static void on_radio_NNNN (GtkWidget *button, gpointer data)
@@ -586,6 +601,7 @@ static void on_radio_NNNN (GtkWidget *button, gpointer data)
   char *id_radio = (char*)data;g_print("%s\n", id_radio);
   s.Ising_neighboorhood = 3;
   set_num_neighbors();
+  // set_exp_values ();
   }
 
 /* Callback to change Ising J = -kB (ferro) vs J = +kB (anti-ferro) -- dirty */
@@ -595,12 +611,14 @@ static void on_radio_ferro (GtkWidget *button, gpointer data)
   {
     char *id_radio = (char*)data;g_print("%s\n", id_radio);
     s.J = -1 * (float) COUPLING;
+    // set_exp_values ();
     }
 // anti Ferro:  J = +kB
 static void on_radio_anti_ferro(GtkWidget *button, gpointer data)
   {
     char *id_radio = (char*)data;g_print("%s\n", id_radio);
     s.J =  1 * (float) COUPLING;
+    // set_exp_values ();
     }
 
 
@@ -633,6 +651,7 @@ static void temperature_scale_moved (GtkRange *range, gpointer user_data)
   {
   gdouble pos = gtk_range_get_value (range);
   s.T = (float) pos;
+  // set_exp_values ();
   }
 
 /* Callback to respond GtK scale slide move event */
@@ -640,6 +659,7 @@ static void external_field_scale_moved (GtkRange *range, gpointer user_data)
   {
   gdouble pos = gtk_range_get_value (range);
   s.B = (float) pos;
+  // set_exp_values ();
   }
 
 
@@ -684,10 +704,8 @@ static void initialize_simulation(void)
   // Display rate to paint the lattice
   s.display_rate = (int) SAMPLE_RATE;
 
-  // /* allocate memory for transition probabilities */
-  // s.transition_probs = malloc(((2*NUM_NEIGHBORS)+1) * sizeof(double));
   // /* compute transition probabilities and store them in double array */
-  // set_transition_probs();
+  // set_exp_values ();
 }
 
 

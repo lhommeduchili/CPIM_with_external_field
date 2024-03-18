@@ -8,8 +8,8 @@
 #include <stdio.h>
 
 /* Lattice Size */
-#define X_SIZE 120
-#define Y_SIZE 120
+#define X_SIZE 256
+#define Y_SIZE 256
 
 /* Defaulfs */
 // number of replicas for each parameter set 
@@ -383,12 +383,12 @@ int main (int argc, char **argv)
             for (double ext_field = -1.00; ext_field <= 1.00; ext_field += 0.01)
                 {
                 s.B = ext_field;
-                initialize_simulation();
+                initialize_simulation ();
                 init_lattice();
                 /* We run the simulation for some generations... */
                 while (s.generation_time < num_gens_hotstart)
                     {
-                    update_lattice();
+                    update_lattice ();
                     }
 
                 /* We now save the next num_gens_averaged generation times' data. */
