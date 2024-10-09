@@ -8,20 +8,20 @@
 #include <stdio.h>
 
 /* Lattice Size */
-#define X_SIZE 250
-#define Y_SIZE 250
+#define X_SIZE 256
+#define Y_SIZE 256
 
 /* Defaults */
 /* Number of replicas for each parameter set  */
-#define REPLICAS
+#define REPLICAS 1
 /* Default birth/colonization rate/probability and scale ranges */
-#define BETA  0.003
+#define BETA  1.0
 
 /* Default mortality/extinction rate/probability and scale ranges */
-#define DELTA  0.00001
+#define DELTA  0.0
 
 /* Default differentiation rate/probability and scale ranges */
-#define ALPHA  0.1
+#define ALPHA  1.0
 
 /* Strength of the coupling in positive terms (J = -1*COUPLING kBT units)
    we should have 1/2 if we do not want to double count pairs,
@@ -35,7 +35,7 @@
 #define RADIUS 1
 
 /* Default initial condition chosen */
-#define INIT 1
+#define INIT 5
 
 /* Default external field (B) and scale ranges */
 #define EXTERNAL_FIELD 0.0
@@ -180,7 +180,7 @@ double compute_energy(int x, int y)
 
 
 /* Update function */
-int update_lattice(gpointer data)
+void update_lattice(void)
 {
     int random_neighbor_state, random_neighbor;
     double random_spin;
@@ -313,18 +313,11 @@ int update_lattice(gpointer data)
     }
 
     s.generation_time++;
-    // if (s.generation_time % s.display_rate == 0)
-    // {
-    //     paint_lattice(data);
-    //     g_print("Gen: %d \t Vacancy: %f \t Occupancy: %f \t Up: %f \t Down: %f\n",
-    //             s.generation_time, (double)s.vacancy / (double)(Y_SIZE * X_SIZE), (double)s.occupancy / (double)(Y_SIZE * X_SIZE), (double)s.up / (double)(s.occupancy), (double)s.down / (double)s.occupancy);
-    // }
-    return 0;
 }
 
 
 /* Callback to initialize the lattice */
-static void init_lattice(GtkWidget *widget, gpointer data)
+static void init_lattice(void)
 {
     int random_spin;
     int x, y;
@@ -469,7 +462,7 @@ int main (int argc, char **argv)
     /* Create a new text file and populate with the data headers */
     FILE *datafile;
     datafile = fopen(argv[1], "w");
-    fprintf(datafile, "replica,lattice_size,temperature,external_field,generation_time,occupancy,up,down\n");
+    fprintf(datafile, "replica,lattice_size, birth_rate, death_rate, temperature,external_field,generation_time,occupancy,up,down\n");
     fclose(datafile);
 
     /* The following variables are used for calculating the variance of 
@@ -481,12 +474,12 @@ int main (int argc, char **argv)
     the parameters*/
 	for (int N = 0; N < REPLICAS; N++)
 	    {
-		for (double temp = 1.00; temp <= 3.6; temp += 0.01)
+		for (double temp = 1.27; temp <= 3.27; temp += 0.01)
             {
             s.T = temp;
-            for (double ext_field = -1.00; ext_field <= 1.00; ext_field += 0.01)
+            for (double death_rate = 0.0; death_rate <= 0.60; death_rate += 0.01)
                 {
-                s.B = ext_field;
+                s.death_rate = death_rate;
                 initialize_simulation ();
                 init_lattice();
                 /* We run the simulation for some generations... */
@@ -499,9 +492,11 @@ int main (int argc, char **argv)
                 for (int t = 0; t < num_gens_averaged + 1; t++)
                     {
                     datafile = fopen(argv[1], "a+");
-                    fprintf(datafile, "%d,%d,%f,%f,%d,%f,%d,%d\n", 
+                    fprintf(datafile, "%d,%d,%f,%f,%f,%f,%d,%f,%d,%d\n", 
                             N, 
-                            X_SIZE, 
+                            X_SIZE,
+                            s.birth_rate,
+                            s.death_rate,
                             s.T,
                             s.B,
                             s.generation_time, 
