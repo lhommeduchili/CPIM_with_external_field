@@ -13,9 +13,9 @@
 #define Y_SIZE 250
 
 /* Defaults */
-#define SAMPLE_RATE 100
+#define SAMPLE_RATE 1
 /* Default birth/colonization rate/probability and scale ranges */
-#define BETA  0.003
+#define BETA  1.0
 #define BETA_STEP 0.00001
 #define BETA_MIN 0.000000
 #define BETA_MAX 1.0
@@ -25,7 +25,7 @@
 #define DELTA_MIN 0.000000
 #define DELTA_MAX 1.0
 /* Default differentiation rate/probability and scale ranges */
-#define ALPHA  0.1
+#define ALPHA  1.0
 #define ALPHA_STEP 0.01
 #define ALPHA_MIN  0.00
 #define ALPHA_MAX  1.0
@@ -446,6 +446,28 @@ static void init_lattice(GtkWidget *widget, gpointer data)
                 }
             }
             break;
+
+        case 6:
+            /* Set up a lattice fully occupied with differentiated particles */
+            random_spin = ((genrand64_int64() % 2) * 2) - 1;
+            for (x = 0; x < X_SIZE; x++)
+            {
+                for (y = 0; y < Y_SIZE; y++)
+                {
+                    s.lattice_configuration[x][y] = random_spin;
+                    s.occupancy++;
+                    s.vacancy--;
+                    if (random_spin == 1)
+                    {
+                        s.up++;
+                    }
+                    else if (random_spin == -1)
+                    {
+                        s.down++;
+                    }
+                }
+            }
+            break;
     }
 
     s.initialized = TRUE;
@@ -473,7 +495,7 @@ static void on_button_show_about(GtkWidget *widget, gpointer data)
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file("X-Institute_logo_small.tif", NULL);
     GtkWidget *dialog = gtk_about_dialog_new();
     gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Contact Process Ising Model App");
-    gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), "version 2.0, 2024");
+    gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), "version 3.0, 2024");
     gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), "Open-Source Software");
     gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), "The Contact Process Ising Model (CPIM).");
     gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://github.com/jekeymer/Contact-Process-Ising-Model/wiki");
@@ -548,6 +570,16 @@ static void on_radio_initial_condition_5(GtkWidget *button, gpointer data)
     g_print("%s\n", id_radio);
     s.init_option = 5;
 }
+
+
+/* Init 6 */
+static void on_radio_initial_condition_6(GtkWidget *button, gpointer data)
+{
+    char *id_radio = (char *)data;
+    g_print("%s\n", id_radio);
+    s.init_option = 6;
+}
+
 
 
 /* Callback to change Ising NN (r=1) vs NNN (r=2) conditions -- dirty
@@ -860,6 +892,10 @@ static void activate(GtkApplication *app, gpointer user_data)
     /* -5- */
     radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio), "Fully occupied undifferentiated lattice");
     g_signal_connect(GTK_TOGGLE_BUTTON(radio), "pressed", G_CALLBACK(on_radio_initial_condition_5), (gpointer)"option 5 selected");
+    gtk_box_pack_start(GTK_BOX(box), radio, TRUE, TRUE, 0);
+    /* -6- */
+    radio = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(radio), "Fully occupied differentiated lattice");
+    g_signal_connect(GTK_TOGGLE_BUTTON(radio), "pressed", G_CALLBACK(on_radio_initial_condition_6), (gpointer)"option 6 selected");
     gtk_box_pack_start(GTK_BOX(box), radio, TRUE, TRUE, 0);
     /* Create IC label for Initial Conditions page and put it in the Notebook */
     label = gtk_label_new("Init Lattice");
